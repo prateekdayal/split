@@ -6,6 +6,8 @@ module Split
     attr_accessor :db_failover_on_db_error
     attr_accessor :allow_multiple_experiments
     attr_accessor :enabled
+    attr_accessor :cookie_expires
+    attr_accessor :cookie_domain
 
     def initialize
       @robot_regex = /\b(Baidu|Gigabot|Googlebot|libwww-perl|lwp-trivial|msnbot|SiteUptime|Slurp|WordPress|ZIBB|ZyBorg)\b/i
@@ -14,6 +16,8 @@ module Split
       @db_failover_on_db_error = proc{|error|} # e.g. use Rails logger here
       @allow_multiple_experiments = false
       @enabled = true
+      @cookie_expires = 1.year.from_now
+      @cookie_domain = ""
     end
   end
 end

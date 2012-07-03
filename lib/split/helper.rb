@@ -28,7 +28,7 @@ module Split
       if alternative_name = ab_user[experiment.key]
         alternative = Split::Alternative.new(alternative_name, experiment_name)
         alternative.increment_completion
-        session[:split].delete(experiment_name) if options[:reset]
+        split_session.delete(experiment_name) if options[:reset]
       end
     rescue => e
       raise unless Split.configuration.db_failover
@@ -45,7 +45,7 @@ module Split
     end
 
     def ab_user
-      session[:split] ||= {}
+      split_session
     end
 
     def exclude_visitor?
@@ -84,6 +84,14 @@ module Split
       else
         false
       end
+    end
+
+    def split_session
+      cookies[:split] ||= {
+        :value => {},
+        :expires => Split.configuration.cookie_expires,
+        :domain => Split.configuration.cookie_domain
+      }
     end
 
 
