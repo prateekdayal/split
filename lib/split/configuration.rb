@@ -16,8 +16,8 @@ module Split
       @db_failover_on_db_error = proc{|error|} # e.g. use Rails logger here
       @allow_multiple_experiments = false
       @enabled = true
-      @cookie_expires = 1.year.from_now
-      @cookie_domain = ""
+      @cookie_expires = nil
+      @cookie_domain = nil
     end
   end
 end
