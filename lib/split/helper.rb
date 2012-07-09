@@ -25,10 +25,13 @@ module Split
     def finished(experiment_name, options = {:reset => true})
       return if exclude_visitor? or !Split.configuration.enabled
       return unless (experiment = Split::Experiment.find(experiment_name))
-      if alternative_name = ab_user[experiment.key]
-        alternative = Split::Alternative.new(alternative_name, experiment_name)
-        alternative.increment_completion
-        split_session.delete(experiment_name) if options[:reset]
+      
+      change_session do
+        if alternative_name = @session[experiment.key]
+          alternative = Split::Alternative.new(alternative_name, experiment_name)
+          alternative.increment_completion
+          @session.delete(experiment_name) if options[:reset]
+        end
       end
     rescue => e
       raise unless Split.configuration.db_failover
@@ -41,11 +44,7 @@ module Split
 
     def begin_experiment(experiment, alternative_name = nil)
       alternative_name ||= experiment.control.name
-      ab_user[experiment.key] = alternative_name
-    end
-
-    def ab_user
-      split_session
+      change_session { @session[experiment.key] = alternative_name }
     end
 
     def exclude_visitor?
@@ -57,18 +56,20 @@ module Split
     end
 
     def doing_other_tests?(experiment_key)
-      ab_user.keys.reject { |k| k == experiment_key }.length > 0
+      get_session.keys.reject { |k| k == experiment_key }.length > 0
     end
 
     def clean_old_versions(experiment)
-      old_versions(experiment).each do |old_key|
-        ab_user.delete old_key
+      change_session do
+        old_versions(experiment).each do |old_key|
+          @session.delete old_key
+        end
       end
     end
 
     def old_versions(experiment)
       if experiment.version > 0
-        ab_user.keys.select { |k| k.match(Regexp.new(experiment.name)) }.reject { |k| k == experiment.key }
+        get_session.keys.select { |k| k.match(Regexp.new(experiment.name)) }.reject { |k| k == experiment.key }
       else
         []
       end
@@ -86,14 +87,29 @@ module Split
       end
     end
 
-    def split_session
-      cookies[:split] ||= {
-        :value => {},
-        :expires => Split.configuration.cookie_expires,
-        :domain => Split.configuration.cookie_domain
-      }
+    def get_session
+      if cookies.signed[:split]
+        Marshal.load(cookies.signed[:split])
+      else
+        {}
+      end
     end
 
+    def set_session(value)
+      cookie = {value: Marshal.dump(value)}
+      cookie[:expires] = Split.configuration.cookie_expires if Split.configuration.cookie_expires
+      cookie[:domain] = Split.configuration.cookie_domain if Split.configuration.cookie_domain
+
+      cookies.signed[:split] = cookie
+    end
+
+    def change_session
+      @session = get_session
+
+      yield @session if block_given?
+
+      set_session(@session)
+    end
 
     protected
 
@@ -113,8 +129,8 @@ module Split
             clean_old_versions(experiment)
             begin_experiment(experiment) if exclude_visitor? or not_allowed_to_test?(experiment.key)
 
-            if ab_user[experiment.key]
-              ret = ab_user[experiment.key]
+            if get_session[experiment.key]
+              ret = get_session[experiment.key]
             else
               alternative = experiment.next_alternative
               alternative.increment_participation
